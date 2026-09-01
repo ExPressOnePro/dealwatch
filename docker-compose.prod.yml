@@ -1,0 +1,79 @@
+# Развёртывание на сервере: код и собранный фронтенд лежат внутри образа,
+# наружу торчит только nginx. Данные живут в томах.
+name: dealwatch
+
+services:
+    app:
+        build:
+            context: .
+            target: app
+        image: dealwatch:latest
+        restart: unless-stopped
+        env_file: [.env]
+        environment:
+            APP_ENV: production
+            # Стектрейсы наружу в проде не отдаём, даже если в .env забыли выключить.
+            APP_DEBUG: "false"
+            # Логи приложения — в docker logs, а не только в файл внутри тома.
+            LOG_CHANNEL: stderr
+            RUN_MIGRATIONS: "true"
+        healthcheck:
+            test: ["CMD", "php", "-r", "exit(0);"]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
+        volumes:
+            - storage:/var/www/html/storage
+            - database:/var/www/html/database
+
+    web:
+        build:
+            context: .
+            target: web
+        image: dealwatch-web:latest
+        restart: unless-stopped
+        ports:
+            - "${DEALWATCH_PORT:-80}:80"
+        healthcheck:
+            test: ["CMD", "wget", "-qO-", "http://127.0.0.1/up"]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
+        depends_on:
+            - app
+
+    queue:
+        image: dealwatch:latest
+        restart: unless-stopped
+        env_file: [.env]
+        environment:
+            APP_ENV: production
+            APP_DEBUG: "false"
+            LOG_CHANNEL: stderr
+        command: php artisan queue:work --tries=1 --timeout=900 --sleep=1
+        volumes:
+            - storage:/var/www/html/storage
+            - database:/var/www/html/database
+        depends_on:
+            - app
+
+    scheduler:
+        image: dealwatch:latest
+        restart: unless-stopped
+        env_file: [.env]
+        environment:
+            APP_ENV: production
+            APP_DEBUG: "false"
+            LOG_CHANNEL: stderr
+        command: php artisan schedule:work
+        volumes:
+            - storage:/var/www/html/storage
+            - database:/var/www/html/database
+        depends_on:
+            - app
+
+volumes:
+    storage:
+    database:

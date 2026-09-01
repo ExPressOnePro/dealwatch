@@ -15,6 +15,14 @@ class CurrencyRepriceTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function bnmXml(float $eur, float $usd): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8"?><ValCurs Date="'.now()->format('d.m.Y').'" name="Official exchange rate">'
+            .'<Valute ID="47"><NumCode>978</NumCode><CharCode>EUR</CharCode><Nominal>1</Nominal><Name>Euro</Name><Value>'.$eur.'</Value></Valute>'
+            .'<Valute ID="44"><NumCode>840</NumCode><CharCode>USD</CharCode><Nominal>1</Nominal><Name>US Dollar</Name><Value>'.$usd.'</Value></Valute>'
+            .'</ValCurs>';
+    }
+
     public function test_currency_listings_follow_the_fresh_rate(): void
     {
         Cache::put('currency_rates_mdl', ['EUR' => 20.0, 'USD' => 18.0, 'MDL' => 1.0], now()->addHour());
@@ -42,7 +50,7 @@ class CurrencyRepriceTest extends TestCase
     public function test_command_rescores_deals_after_repricing(): void
     {
         MarketPrice::factory()->create();
-        Http::fake(['api.frankfurter.app/*' => Http::response(['rates' => ['MDL' => 15.0, 'USD' => 1.1]])]);
+        Http::fake(['www.bnm.md/*' => Http::response($this->bnmXml(15.0, 17.0))]);
         Cache::put('currency_rates_mdl', ['EUR' => 20.0, 'USD' => 18.0, 'MDL' => 1.0], now()->addHour());
 
         $listing = Listing::factory()->create([

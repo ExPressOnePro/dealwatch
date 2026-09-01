@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AiRequest;
 use App\Services\Ai\AiBudget;
 use App\Services\Ai\OpenAiClient;
+use App\Services\CurrencyRateService;
 use App\Settings\SettingDefinition;
 use App\Settings\SettingsRepository;
 use App\Settings\SettingsSchema;
@@ -20,6 +21,7 @@ class SettingsController extends Controller
         private readonly SettingsRepository $settings,
         private readonly OpenAiClient $client,
         private readonly AiBudget $budget,
+        private readonly CurrencyRateService $rates,
     ) {}
 
     public function edit(Request $request): Response
@@ -30,6 +32,7 @@ class SettingsController extends Controller
             'groups' => $this->groups(),
             'models' => $this->client->availableModels(),
             'usage' => $this->budget->today(),
+            'rates' => $this->rates->status(),
             'spend' => [
                 'last_7_days' => round((float) AiRequest::query()
                     ->billable()

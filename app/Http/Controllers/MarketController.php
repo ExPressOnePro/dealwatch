@@ -44,6 +44,7 @@ class MarketController extends Controller
             'methodology' => $this->methodology(),
             'corpus' => $this->corpusStats->summary(0),
             'rates' => $this->rates->rates(),
+            'rates_status' => $this->rates->status(),
         ]);
     }
 
@@ -54,6 +55,7 @@ class MarketController extends Controller
             'methodology' => $this->methodology(),
             'corpus' => $this->corpusStats->summary(0),
             'rates' => $this->rates->rates(),
+            'rates_status' => $this->rates->status(),
         ]);
     }
 

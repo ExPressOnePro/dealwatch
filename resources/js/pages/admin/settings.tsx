@@ -34,6 +34,7 @@ type Props = {
         cost_left_usd: number;
     };
     spend: { last_7_days: number; calls_7_days: number };
+    rates: { source: string; rate_date: string | null; age_hours: number | null; stale: boolean; rates: Record<string, number> };
     flash?: { success?: string; error?: string; ping?: { ok: boolean; message: string } };
 };
 
@@ -44,7 +45,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const MODEL_FIELDS = ['ai.model_screen', 'ai.model_deep'];
 
-export default function AdminSettings({ groups, models, usage, spend, flash }: Props) {
+export default function AdminSettings({ groups, models, usage, spend, rates, flash }: Props) {
     const initial: Record<string, string | boolean> = {};
     Object.values(groups).forEach((group) =>
         group.fields.forEach((field) => {
@@ -103,6 +104,18 @@ export default function AdminSettings({ groups, models, usage, spend, flash }: P
                             <div className="text-muted-foreground text-xs tracking-wide uppercase">За 7 дней</div>
                             <div className="mt-1 text-xl font-semibold">${spend.last_7_days.toFixed(4)}</div>
                             <div className="text-muted-foreground text-xs">{spend.calls_7_days} обращений</div>
+                        </div>
+                    </div>
+
+                    <div className={`rounded-xl border px-4 py-3 text-sm ${rates?.stale ? 'surface-warning' : 'surface-info'}`}>
+                        <div className="text-xs font-semibold tracking-wide uppercase opacity-80">Курс валют</div>
+                        <div className="mt-1">
+                            1 EUR = {rates?.rates?.EUR?.toFixed(4)} MDL · 1 USD = {rates?.rates?.USD?.toFixed(4)} MDL
+                        </div>
+                        <div className="text-xs opacity-80">
+                            {rates?.source === 'bnm' ? 'официальный курс Нацбанка Молдовы' : 'аварийные значения из .env'}
+                            {rates?.rate_date ? ` · на ${rates.rate_date}` : ''}
+                            {rates?.stale ? ' · давно не обновлялся, запусти php artisan currency:refresh' : ''}
                         </div>
                     </div>
 

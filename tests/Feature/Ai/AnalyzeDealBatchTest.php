@@ -7,6 +7,7 @@ use App\Models\AiBatchAnalysis;
 use App\Models\Deal;
 use App\Models\Listing;
 use App\Models\MarketPrice;
+use App\Models\SearchProfile;
 use App\Models\User;
 use App\Services\Ai\ListingBatchAnalyst;
 use App\Services\Ai\QueryInterpreter;
@@ -193,6 +194,43 @@ class AnalyzeDealBatchTest extends TestCase
         $this->assertSame(AiBatchAnalysis::STATUS_FAILED, $analysis->status);
         $this->assertStringContainsString('HTTP 500', $analysis->error);
         $this->assertSame('failed', $status->get(PipelineRunStatus::AI_BATCH)['state']);
+    }
+
+    public function test_analysis_of_another_source_is_not_shown(): void
+    {
+        $phones = SearchProfile::factory()->create(['name' => 'Телефоны']);
+        $bikes = SearchProfile::factory()->generic()->create(['name' => 'Велосипеды']);
+
+        AiBatchAnalysis::create([
+            'user_id' => $this->user->id,
+            'source' => AiBatchAnalysis::SOURCE_FILTER,
+            'filters' => ['profile' => $phones->id, 'segment' => 'targets'],
+            'status' => AiBatchAnalysis::STATUS_DONE,
+            'summary' => 'Разбор телефонов',
+            'items' => [],
+        ]);
+
+        // На странице другого источника чужой разбор показывать нельзя.
+        $this->actingAs($this->user)
+            ->get('/deals?profile='.$bikes->id)
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('analysis', null));
+
+        $this->actingAs($this->user)
+            ->get('/deals?profile='.$phones->id)
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('analysis.summary', 'Разбор телефонов'));
+    }
+
+    public function test_analysis_remembers_the_source(): void
+    {
+        Queue::fake();
+        $profile = SearchProfile::factory()->create();
+
+        $this->actingAs($this->user)->post('/deals/analyze', [
+            'profile' => $profile->id,
+            'segment' => 'targets',
+        ]);
+
+        $this->assertSame($profile->id, AiBatchAnalysis::sole()->filters['profile']);
     }
 
     public function test_run_notice_can_be_dismissed(): void

@@ -7,6 +7,7 @@ use App\Jobs\RefreshAnalytics;
 use App\Models\Deal;
 use App\Models\IgnoredListing;
 use App\Models\Listing;
+use App\Models\SearchProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -177,6 +178,74 @@ class DealsPageTest extends TestCase
         $this->actingAs($this->user)
             ->get('/deals?sort=model')
             ->assertInertia(fn (AssertableInertia $page) => $page->has('deals', 3));
+    }
+
+    public function test_choosing_a_source_scopes_the_whole_page(): void
+    {
+        $phones = SearchProfile::factory()->create(['name' => 'Телефоны']);
+        $bikes = SearchProfile::factory()->generic()->create(['name' => 'Велосипеды']);
+
+        // Две сделки в одном источнике и одна в другом.
+        Deal::factory()->count(2)->create([
+            'listing_id' => fn () => Listing::factory()->create(['search_profile_id' => $phones->id])->id,
+            'verdict' => 'buy',
+            'potential_profit' => 1000,
+        ]);
+        Deal::factory()->create([
+            'listing_id' => Listing::factory()->create(['search_profile_id' => $bikes->id])->id,
+            'verdict' => 'buy',
+            'potential_profit' => 5000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get('/deals?profile='.$phones->id)
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('deals', 2)
+                // Счётчики и сводка по базе тоже только по этому источнику.
+                ->where('stats.buy', 2)
+                ->where('stats.total', 2)
+                ->where('stats.profit_sum', 2000)
+                ->where('corpus.total', 2)
+                ->where('active_source.name', 'Телефоны')
+            );
+
+        $this->actingAs($this->user)
+            ->get('/deals')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('stats.buy', 3)
+                ->where('stats.profit_sum', 7000)
+                ->where('corpus.total', 3)
+                ->where('active_source', null)
+            );
+    }
+
+    public function test_model_filter_options_follow_the_selected_source(): void
+    {
+        $phones = SearchProfile::factory()->create();
+        $bikes = SearchProfile::factory()->generic()->create();
+
+        Deal::factory()->create([
+            'listing_id' => Listing::factory()->create([
+                'search_profile_id' => $phones->id,
+                'brand' => 'Apple',
+                'model' => 'iPhone 13',
+            ])->id,
+        ]);
+        Deal::factory()->create([
+            'listing_id' => Listing::factory()->create([
+                'search_profile_id' => $bikes->id,
+                'brand' => 'Bergamont',
+                'model' => 'Gravel',
+                'seller_type' => 'private',
+            ])->id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get('/deals?profile='.$phones->id)
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('models', 1)
+                ->where('models.0.label', 'Apple iPhone 13')
+            );
     }
 
     public function test_collect_is_queued_instead_of_running_in_the_request(): void

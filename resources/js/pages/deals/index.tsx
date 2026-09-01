@@ -58,12 +58,25 @@ type Props = {
         profile?: number | string | null;
     };
     sources?: { id: number; name: string; scoring: string; is_active: boolean }[];
+    active_source?: { id: number; name: string } | null;
     flash?: { success?: string; error?: string };
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Deals', href: '/deals' }];
 
-export default function DealsIndex({ deals, stats, corpus, models = [], filters, flash, runs, analysis, ai, sources = [] }: Props) {
+export default function DealsIndex({
+    deals,
+    stats,
+    corpus,
+    models = [],
+    filters,
+    flash,
+    runs,
+    analysis,
+    ai,
+    sources = [],
+    active_source = null,
+}: Props) {
     const aiReady = ai?.configured ?? false;
     const visionReady = ai?.vision ?? false;
     const aiHint = aiReady ? undefined : 'Добавь OPENAI_API_KEY в .env, чтобы включить ИИ-разбор';
@@ -127,8 +140,15 @@ export default function DealsIndex({ deals, stats, corpus, models = [], filters,
             <div className="flex flex-1 flex-col gap-5 p-4 md:p-6">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <h1 className="text-2xl font-semibold tracking-tight">DealWatch</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">Живой мониторинг 999.md — потенциальная прибыль по каждому объявлению.</p>
+                        <h1 className="text-2xl font-semibold tracking-tight">
+                            DealWatch
+                            {active_source && <span className="text-muted-foreground text-lg font-normal"> · {active_source.name}</span>}
+                        </h1>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                            {active_source
+                                ? 'Всё на этой странице — только по выбранному источнику: счётчики, база и объявления.'
+                                : 'Живой мониторинг 999.md — потенциальная прибыль по каждому объявлению.'}
+                        </p>
                         {sources.length > 1 && (
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <span className="text-muted-foreground text-xs tracking-wide uppercase">Источник</span>
@@ -145,9 +165,14 @@ export default function DealsIndex({ deals, stats, corpus, models = [], filters,
                                     ))}
                                 </select>
                                 {filters.profile && (
-                                    <Link href={`/niches?profile=${filters.profile}`} className="text-xs underline underline-offset-2">
-                                        аналитика источника
-                                    </Link>
+                                    <>
+                                        <Link href={`/niches?profile=${filters.profile}`} className="text-xs underline underline-offset-2">
+                                            аналитика источника
+                                        </Link>
+                                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setFilter('profile', null)}>
+                                            показать все
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         )}
@@ -161,7 +186,13 @@ export default function DealsIndex({ deals, stats, corpus, models = [], filters,
                             variant="secondary"
                             disabled={!aiReady}
                             title={aiHint}
-                            onClick={() => router.post('/deals/analyze', { ...filters, query: '' }, { preserveScroll: true })}
+                            onClick={() =>
+                                router.post(
+                                    '/deals/analyze',
+                                    { ...filters, profile: filters.profile ?? undefined, query: '' },
+                                    { preserveScroll: true },
+                                )
+                            }
                         >
                             <Sparkles className="mr-2 size-4" />
                             Разобрать выборку ИИ
@@ -247,7 +278,7 @@ export default function DealsIndex({ deals, stats, corpus, models = [], filters,
                     className="flex flex-col gap-2 sm:flex-row"
                     onSubmit={(e) => {
                         e.preventDefault();
-                        aiForm.transform((data) => ({ ...filters, query: data.query }));
+                        aiForm.transform((data) => ({ ...filters, profile: filters.profile ?? undefined, query: data.query }));
                         aiForm.post('/deals/analyze', {
                             preserveScroll: true,
                             onSuccess: () => aiForm.reset(),

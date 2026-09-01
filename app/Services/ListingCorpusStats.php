@@ -13,18 +13,18 @@ class ListingCorpusStats
      *
      * @return array<string, mixed>
      */
-    public function summary(int $months = 0): array
+    public function summary(int $months = 0, ?int $profileId = null): array
     {
         return StatsCache::remember(
-            'dealwatch:stats:corpus:'.$months,
-            fn () => $this->build($months)
+            'dealwatch:stats:corpus:'.$months.($profileId ? ':'.$profileId : ''),
+            fn () => $this->build($months, $profileId)
         );
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function build(int $months): array
+    private function build(int $months, ?int $profileId = null): array
     {
         $since = $months > 0
             ? now('Europe/Chisinau')->subMonths($months)->startOfDay()
@@ -37,6 +37,7 @@ class ListingCorpusStats
         $row = Listing::query()
             ->where('platform', '999')
             ->where('status', 'active')
+            ->when($profileId, fn ($q) => $q->where('search_profile_id', $profileId))
             ->when($since, fn ($q) => $q->where('published_at', '>=', $since))
             ->selectRaw(
                 'count(*) as total,'

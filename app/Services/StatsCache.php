@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\SearchProfile;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -40,9 +41,21 @@ class StatsCache
             Cache::forget($key);
         }
 
-        // Сводка по корпусу кешируется с окном в ключе.
-        foreach ([0, 1, 2, 3, 6, 12] as $months) {
-            Cache::forget('dealwatch:stats:corpus:'.$months);
+        // У счётчиков есть разрезы: окно по месяцам, сегмент и выбранный источник.
+        $profiles = SearchProfile::query()->pluck('id')->push(null);
+
+        foreach ($profiles as $profileId) {
+            $suffix = $profileId ? ':'.$profileId : '';
+
+            Cache::forget('dealwatch:stats:feed'.$suffix);
+
+            foreach ([0, 1, 2, 3, 6, 12] as $months) {
+                Cache::forget('dealwatch:stats:corpus:'.$months.$suffix);
+            }
+
+            foreach (DealFeedQuery::SEGMENTS as $segment) {
+                Cache::forget('dealwatch:stats:models:'.$segment.$suffix);
+            }
         }
     }
 }

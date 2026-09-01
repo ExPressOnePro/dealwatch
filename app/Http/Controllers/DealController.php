@@ -102,9 +102,10 @@ class DealController extends Controller
             ->get()
             ->groupBy('listing_id');
 
-        $models = StatsCache::remember('dealwatch:stats:models:'.$segment, fn () => Deal::query()
+        $models = StatsCache::remember('dealwatch:stats:models:'.$segment.($profileId ? ':'.$profileId : ''), fn () => Deal::query()
             ->join('listings', 'listings.id', '=', 'deals.listing_id')
             ->tap(fn ($q) => $feed->applySegment($q, $segment))
+            ->when($profileId, fn ($q) => $q->where('listings.search_profile_id', $profileId))
             ->whereIn('deals.user_status', Deal::ACTIVE_STATUSES)
             ->whereNotNull('listings.brand')
             ->whereNotNull('listings.model')
@@ -250,19 +251,23 @@ class DealController extends Controller
             ];
         });
 
-        $corpus = $corpusStats->summary(0);
+        // Выбран источник — вся страница показывает только его.
+        $corpus = $corpusStats->summary(0, $profileId);
 
         return Inertia::render('deals/index', [
             'deals' => $deals,
-            'stats' => $feedStats->headline(),
+            'stats' => $feedStats->headline($profileId),
             'runs' => $runs->all(),
-            'analysis' => $this->latestAnalysis($request),
+            'analysis' => $this->latestAnalysis($request, $profileId),
             'ai' => [
                 'configured' => app(OpenAiClient::class)->configured(),
                 'vision' => app(ListingDeepAnalyst::class)->visionAvailable(),
             ],
             'corpus' => $corpus,
             'models' => $models,
+            'active_source' => $profileId
+                ? SearchProfile::query()->find($profileId)?->only(['id', 'name'])
+                : null,
             'sources' => SearchProfile::query()
                 ->orderByDesc('is_active')
                 ->orderBy('name')
@@ -331,13 +336,17 @@ class DealController extends Controller
      *
      * @return array<string, mixed>|null
      */
-    private function latestAnalysis(Request $request): ?array
+    private function latestAnalysis(Request $request, ?int $profileId): ?array
     {
+        // Разбор относится к конкретной выборке: чужой источник показывать нельзя,
+        // иначе на странице велосипедов висит вывод про телефоны.
         $analysis = AiBatchAnalysis::query()
             ->when($request->user(), fn ($q) => $q->where('user_id', $request->user()->id))
             ->where('created_at', '>=', now()->subDay())
             ->latest('id')
-            ->first();
+            ->limit(20)
+            ->get()
+            ->first(fn (AiBatchAnalysis $item) => (int) data_get($item->filters, 'profile') === (int) $profileId);
 
         if (! $analysis) {
             return null;
@@ -457,6 +466,7 @@ class DealController extends Controller
     {
         $data = $request->validate([
             'query' => 'nullable|string|max:300',
+            'profile' => 'nullable|integer|exists:search_profiles,id',
             'segment' => 'nullable|string|in:'.implode(',', DealFeedQuery::SEGMENTS),
             'status' => 'nullable|string',
             'verdict' => 'nullable|string',
@@ -474,6 +484,7 @@ class DealController extends Controller
             'source' => $query !== '' ? AiBatchAnalysis::SOURCE_QUERY : AiBatchAnalysis::SOURCE_FILTER,
             'query' => $query !== '' ? $query : null,
             'filters' => [
+                'profile' => $request->integer('profile') ?: null,
                 'segment' => $data['segment'] ?? 'targets',
                 'status' => $data['status'] ?? 'active',
                 'verdict' => $data['verdict'] ?? 'all',
